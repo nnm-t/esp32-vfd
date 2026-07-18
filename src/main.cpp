@@ -1,6 +1,11 @@
 #include <cmath>
+#include <cstring>
 
 #include <Arduino.h>
+#include <WiFi.h>
+
+#include "esp_mac.h"
+#include "esp_now.h"
 
 #include "led.hpp"
 #include "vfd.hpp"
@@ -31,6 +36,9 @@ namespace {
 
     uint8_t value_0 = 0;
     int32_t value_1 = 0;
+
+    bool is_esp_now_init = false;
+    uint32_t esp_now_receive_ms = 0;
 }
 
 void digit_left()
@@ -191,6 +199,30 @@ void show_digit(const VFDGrid grid)
     }
 }
 
+void on_esp_now_received(const esp_now_recv_info_t* esp_now_info, const uint8_t* data, int data_len)
+{
+    esp_now_receive_ms = millis();
+
+    uint8_t src_addr[6] = { 0 };
+    std::memcpy(src_addr, esp_now_info->src_addr, sizeof(src_addr));
+
+    Serial.printf("From %02x:%02x:%02x:%02x:%02x:%02x : ", src_addr[0], src_addr[1], src_addr[2], src_addr[3], src_addr[4], src_addr[5]);
+
+    if (data_len != 5)
+    {
+        Serial.println("invalid data");
+        return;
+    }
+
+    const uint8_t receive_value_0 = data[0];
+    const int32_t receive_value_1 = (data[1] << 24) + (data[2] << 16) + (data[3] << 8) + data[4];
+
+    Serial.printf("%d %d\n", receive_value_0, receive_value_1);
+
+    value_0 = receive_value_0;
+    value_1 = receive_value_1;
+}
+
 void setup()
 {
     Serial.begin(uart_baud_bps);
@@ -208,17 +240,50 @@ void setup()
     sw_d.on_pressed = value_up;
 
     vfd.begin();
+
+    // MAC Address
+    uint8_t mac_base[6] = { 0 };
+
+    Serial.print("ESP32 MAC: ");
+    if (esp_efuse_mac_get_default(mac_base) != ESP_OK)
+    {
+        Serial.println("Unknown");
+        return;
+    }
+
+    Serial.printf("%02x:%02x:%02x:%02x:%02x:%02x\n", mac_base[0], mac_base[1], mac_base[2], mac_base[3], mac_base[4], mac_base[5]);
+    
+    // ESP-NOW
+    WiFi.mode(WIFI_STA);
+
+    if (esp_now_init() != ESP_OK)
+    {
+        Serial.println("ESP-NOW init is failed.");
+        return;
+    }
+
+    if (esp_now_register_recv_cb(on_esp_now_received) != ESP_OK)
+    {
+        Serial.println("ESP-NOW register callback is failed.");
+    }
+
+    is_esp_now_init = true;
 }
 
 void loop()
 {
-    if (millis() % 500 < 250)
+    // ループ中
+    led.on(LEDColor::Yellow);
+
+    if (esp_now_receive_ms + 100 > millis())
     {
-        led.on(LEDColor::White);
+        // ESP-NOW受信
+        led.on(LEDColor::Blue);
     }
-    else
+    else if (is_esp_now_init && millis() % 500 < 250)
     {
-        led.off();
+        // ESP-NOW 初期化済
+        led.on(LEDColor::White);
     }
 
     sw_a.update();
