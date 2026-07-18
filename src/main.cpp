@@ -1,8 +1,11 @@
 #include <cmath>
 #include <cstring>
+#include <string>
 
 #include <Arduino.h>
 #include <WiFi.h>
+
+#include <ArduinoJson.h>
 
 #include "esp_mac.h"
 #include "esp_now.h"
@@ -206,21 +209,30 @@ void on_esp_now_received(const esp_now_recv_info_t* esp_now_info, const uint8_t*
     uint8_t src_addr[6] = { 0 };
     std::memcpy(src_addr, esp_now_info->src_addr, sizeof(src_addr));
 
-    Serial.printf("From %02x:%02x:%02x:%02x:%02x:%02x : ", src_addr[0], src_addr[1], src_addr[2], src_addr[3], src_addr[4], src_addr[5]);
+    Serial.printf("Receive from %02x:%02x:%02x:%02x:%02x:%02x : ", src_addr[0], src_addr[1], src_addr[2], src_addr[3], src_addr[4], src_addr[5]);
 
-    if (data_len != 5)
+    std::string str((char*)data, data_len);
+    Serial.println(str.c_str());
+
+    // JSON Parse
+    JsonDocument json_document;
+    const DeserializationError err = deserializeJson(json_document, str);
+
+    if (err != DeserializationError::Ok)
     {
-        Serial.println("invalid data");
+        Serial.println("JSON deserialization error.");
         return;
     }
 
-    const uint8_t receive_value_0 = data[0];
-    const int32_t receive_value_1 = (data[1] << 24) + (data[2] << 16) + (data[3] << 8) + data[4];
+    if (json_document["number"].is<uint8_t>())
+    {
+        value_0 = json_document["number"].as<uint8_t>();
+    }
 
-    Serial.printf("%d %d\n", receive_value_0, receive_value_1);
-
-    value_0 = receive_value_0;
-    value_1 = receive_value_1;
+    if (json_document["value"].is<int32_t>())
+    {
+        value_1 = json_document["value"].as<int32_t>();
+    }
 }
 
 void setup()
