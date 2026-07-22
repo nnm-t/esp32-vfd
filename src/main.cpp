@@ -233,6 +233,28 @@ void on_esp_now_received(const esp_now_recv_info_t* esp_now_info, const uint8_t*
     {
         value_1 = json_document["value"].as<int32_t>();
     }
+
+    const uint32_t abs_value = std::abs(value_1);
+    if (abs_value >= 10000)
+    {
+        digit = 5;
+    }
+    else if (abs_value >= 1000)
+    {
+        digit = 6;
+    }
+    else if (abs_value >= 100)
+    {
+        digit = 7;
+    }
+    else if (abs_value >= 10)
+    {
+        digit = 8;
+    }
+    else
+    {
+        digit = 9;
+    }
 }
 
 void setup()
